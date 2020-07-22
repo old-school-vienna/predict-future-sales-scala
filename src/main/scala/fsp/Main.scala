@@ -1,15 +1,10 @@
 package fsp
 
 import java.nio.file.Path
-import java.text.ParsePosition
-import java.time.{Duration, LocalDateTime}
-import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
-import java.util.{Calendar, Date, Locale, TimeZone}
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
-import org.apache.commons.lang3.time.DateParser
-import org.apache.commons.math3.transform.DftNormalization
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.DateTimeOperations
 import org.apache.spark.sql.{Encoder, Encoders, Row, SparkSession}
 
 /*
@@ -58,8 +53,13 @@ object Main {
                     )
 
   case class DsTl(
-                   date: Int,
+                   date: Long,
                    itemCntDay: Double,
+                 )
+  
+  case class Dat (
+                 index: Int,
+                 dat: String,
                  )
 
   case class K1(
@@ -83,13 +83,16 @@ object Main {
     )
   }
 
-  private lazy val dfmt = DateTimeFormatter.ofPattern("dd.mm.yyyy")
-  private lazy val startDay = LocalDateTime.parse("01.01.2013", dfmt)
+  private lazy val min = Dat(0, "01.01.2013")
+  private lazy val max = Dat(1033, "31.10.2015")
+
+  private lazy val dfmt = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+  private val startEpoch = LocalDate.parse(min.dat, dfmt).toEpochDay
 
 
-  def toIntDate(d: String): Int = {
-    val ld = LocalDateTime.parse(d, dfmt)
-    Duration.between(startDay, ld).toDays.toInt
+  def toIntDate(d: String): Long = {
+    val epoch = LocalDate.parse(d, dfmt).toEpochDay
+    epoch - startEpoch
   }
 
   implicit val orienc: Encoder[DsTrain] = Encoders.kryo[DsTrain]
@@ -107,16 +110,42 @@ object Main {
       .map(toDsTrain)
       .rdd
 
-    val grouped = dsTrain
-      .groupBy(x => K2(x.itemId, x.shopId))
-      .sortBy { case (k, _) => k.itemId }
-      .sortBy { case (k, _) => k.shopId }
-      .map { case (k, vals) => (k, vals.map(df => DsTl(toIntDate(df.date), df.itemCntDay)).toSeq.sortBy(x => x.date)) }
-      .take(40).toList
-    println(grouped.mkString("\n"))
+    ts(dsTrain)
+    //dat(dsTrain)
 
     spark.stop()
 
   }
+  
+  def mergeZeros(sdtls: Seq[DsTl], from: Int, to: Int): List[DsTl] = {
+    val dict = sdtls.map(x => (x.date, x)).toMap
+    @scala.annotation.tailrec
+    def _merge(inds: List[Int], out: List[DsTl]): List[DsTl] = {
+      inds match {
+        case Nil => out.reverse
+        case h :: r => _merge(r, dict.getOrElse(h, DsTl(h, 0.0)) :: out)
+      }
+    }
+    _merge((from to to).toList, List.empty[DsTl])
+  }
 
+  private def ts(dsTrain: RDD[DsTrain]): Unit = {
+    val processes = dsTrain
+      .groupBy(x => K2(x.itemId, x.shopId))
+      .sortBy { case (k, _) => k.itemId }
+      .sortBy { case (k, _) => k.shopId }
+      .map { case (k, vals) => (k, vals.map(df => DsTl(toIntDate(df.date), df.itemCntDay)).toSeq.sortBy(x => x.date)) }
+      .map {case (k, vals) => (k, mergeZeros(vals, min.index, max.index))}
+      .take(40).toList
+    println(processes.mkString("\n"))
+  }
+
+  private def dat(dsTrain: RDD[DsTrain]): Unit = {
+    val processed = dsTrain
+      .groupBy(x => x.date)
+      .map { case (k, _) => (toIntDate(k), k) }
+      .sortBy { case (i, _) => i }
+      .toLocalIterator
+    println(processed.mkString("\n"))
+  }
 }
