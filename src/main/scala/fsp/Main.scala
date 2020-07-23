@@ -102,7 +102,7 @@ object Main {
     val spark = SparkSession.builder().appName("main").master("local").getOrCreate()
 
     val dd = System.getenv("DATADIR")
-    val infilePath = Path.of(dd, "pfs", "sales_train.csv")
+    val infilePath = Path.of(dd, "sales_train.csv")
     println(s"-- infilePath $infilePath")
     val dsTrain: RDD[DsTrain] = spark.read
       .options(Map("delimiter" -> ",", "header" -> "true"))
