@@ -4,6 +4,8 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+import entelijan.viz.Viz.{DataRow, Diagram, XYZ}
+import entelijan.viz.{VizCreator, VizCreators}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, Encoders, Row, SparkSession}
 
@@ -53,14 +55,14 @@ object Main {
                     )
 
   case class DsTl(
-                   date: Long,
+                   day: Long,
                    itemCntDay: Double,
                  )
-  
-  case class Dat (
-                 index: Int,
-                 dat: String,
-                 )
+
+  case class Dat(
+                  index: Int,
+                  dat: String,
+                )
 
   case class K1(
                  itemId: Int,
@@ -116,9 +118,10 @@ object Main {
     spark.stop()
 
   }
-  
+
   def mergeZeros(sdtls: Seq[DsTl], from: Int, to: Int): List[DsTl] = {
-    val dict = sdtls.map(x => (x.date, x)).toMap
+    val dict = sdtls.map(x => (x.day, x)).toMap
+
     @scala.annotation.tailrec
     def _merge(inds: List[Int], out: List[DsTl]): List[DsTl] = {
       inds match {
@@ -126,18 +129,35 @@ object Main {
         case h :: r => _merge(r, dict.getOrElse(h, DsTl(h, 0.0)) :: out)
       }
     }
+
     _merge((from to to).toList, List.empty[DsTl])
   }
 
+  def trainToTl(dft: DsTrain): DsTl = DsTl(toIntDate(dft.date), dft.itemCntDay)
+
   private def ts(dsTrain: RDD[DsTrain]): Unit = {
-    val processes = dsTrain
+    val rows = dsTrain
       .groupBy(x => K2(x.itemId, x.shopId))
-      .sortBy { case (k, _) => k.itemId }
-      .sortBy { case (k, _) => k.shopId }
-      .map { case (k, vals) => (k, vals.map(df => DsTl(toIntDate(df.date), df.itemCntDay)).toSeq.sortBy(x => x.date)) }
-      .map {case (k, vals) => (k, mergeZeros(vals, min.index, max.index))}
-      .take(40).toList
-    println(processes.mkString("\n"))
+      .map { case (_, vals) => vals.map(trainToTl).toList }
+      .map(l => (mergeZeros(l, 0, 59), l.map(x => x.itemCntDay).sum))
+      .zipWithIndex()
+      .map { case ((ts, _), i) => ts.map(t => XYZ(i, t.day, t.itemCntDay)) }
+      .map(data => DataRow(data = data))
+      .take(20)
+
+    println(rows.mkString("\n"))
+    
+    val dia = Diagram[XYZ](
+      id = "pfs_prod_month",
+      title = "sales per product and month",
+      xyPlaneAt = Some(0),
+      dataRows = rows.toList,
+    )
+
+    val crea: VizCreator[XYZ] = VizCreators.gnuplot(clazz = classOf[XYZ])
+    crea.createDiagram(dia)
+
+
   }
 
   private def dat(dsTrain: RDD[DsTrain]): Unit = {

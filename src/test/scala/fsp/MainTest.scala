@@ -13,7 +13,7 @@ class MainTest extends AnyFunSuite with Matchers {
 
 
   test("merge zeros") {
-    val l = List(DsTl(2L, 0.5), DsTl(5L, 1.5))
+    val l = List(DsTl(5L, 1.5), DsTl(2L, 0.5))
     val l1 = Main.mergeZeros(l, 0, 6)
     l1.mkString(",").mustBe("DsTl(0,0.0),DsTl(1,0.0),DsTl(2,0.5),DsTl(3,0.0),DsTl(4,0.0),DsTl(5,1.5),DsTl(6,0.0)")
   }
