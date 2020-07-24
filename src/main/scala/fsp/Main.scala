@@ -4,8 +4,8 @@ import java.nio.file.Path
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-import entelijan.viz.Viz.{DataRow, Diagram, XYZ}
-import entelijan.viz.{VizCreator, VizCreators}
+import entelijan.viz.Viz._
+import entelijan.viz._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, Encoders, Row, SparkSession}
 
@@ -139,19 +139,22 @@ object Main {
     val rows = dsTrain
       .groupBy(x => K2(x.itemId, x.shopId))
       .toLocalIterator
-      .map { case (_, vals) => vals.map(trainToTl) }
+      .map { case (_, vals) => vals.map(trainToTl).toSeq }
       .map(l => (l, l.map(x => x.itemCntDay).sum))
       .toSeq
       .zipWithIndex
-      .map { case ((ts, _), i) => ts.map(t => XYZ(i, t.day, t.itemCntDay)) }
-      .map(data => DataRow(data = data.toList))
-      .take(20)
+      .map { case ((ts, _), i) => ts.map(t => XYZ(t.day, i, t.itemCntDay)) }
+      .map(data => DataRow(data = data, style = Style_BOXES))
+      .take(100)
 
     println(rows.mkString("\n"))
-    
+
     val dia = Diagram[XYZ](
+      xLabel = Some("Time (days)"),
+      yLabel = Some("product per shop"),
       id = "pfs_prod_month",
-      title = "sales per product and month",
+      title = "sales from product and shop per day",
+
       xyPlaneAt = Some(0),
       dataRows = rows.toList,
     )
