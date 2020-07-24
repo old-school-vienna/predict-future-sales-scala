@@ -138,11 +138,13 @@ object Main {
   private def ts(dsTrain: RDD[DsTrain]): Unit = {
     val rows = dsTrain
       .groupBy(x => K2(x.itemId, x.shopId))
-      .map { case (_, vals) => vals.map(trainToTl).toList }
-      .map(l => (mergeZeros(l, 0, 59), l.map(x => x.itemCntDay).sum))
-      .zipWithIndex()
+      .toLocalIterator
+      .map { case (_, vals) => vals.map(trainToTl) }
+      .map(l => (l, l.map(x => x.itemCntDay).sum))
+      .toSeq
+      .zipWithIndex
       .map { case ((ts, _), i) => ts.map(t => XYZ(i, t.day, t.itemCntDay)) }
-      .map(data => DataRow(data = data))
+      .map(data => DataRow(data = data.toList))
       .take(20)
 
     println(rows.mkString("\n"))
