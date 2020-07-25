@@ -138,14 +138,14 @@ object Main {
   private def ts(dsTrain: RDD[DsTrain]): Unit = {
     val rows = dsTrain
       .groupBy(x => K2(x.itemId, x.shopId))
-      .toLocalIterator
       .map { case (_, vals) => vals.map(trainToTl).toSeq }
       .map(l => (l, l.map(x => x.itemCntDay).sum))
-      .toSeq
+      .sortBy(t => t._2)
       .zipWithIndex
       .map { case ((ts, _), i) => ts.map(t => XYZ(t.day, i, t.itemCntDay)) }
       .map(data => DataRow(data = data, style = Style_BOXES))
-      .take(100)
+      .take(10)
+      .toSeq
 
     println(rows.mkString("\n"))
 
