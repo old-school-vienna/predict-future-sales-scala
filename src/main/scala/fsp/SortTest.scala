@@ -19,7 +19,7 @@ case class TG(
 
 object SortTest extends App {
 
-  noSparkUngrouped()
+  sparkUngrouped()
   
   def createDataGrouped(): Seq[Seq[T]] =
     for (j <- 10 to 30) yield {
@@ -36,7 +36,7 @@ object SortTest extends App {
       TG(groups(j),i, math.max(j + 5  + d, 0.0))
     }
   }
-    
+
 
 
   private def noSparkUngrouped(): Unit = {
@@ -61,6 +61,39 @@ object SortTest extends App {
 
       xyPlaneAt = Some(0),
       dataRows = rows,
+    )
+    val crea: VizCreator[XYZ] = VizCreators.gnuplot(clazz = classOf[XYZ])
+    crea.createDiagram(dia)
+  }
+
+  private def sparkUngrouped(): Unit = {
+
+    val spark = SparkSession.builder().appName("main").master("local").getOrCreate()
+
+    val ts = createDataUngrouped()
+    val tss = spark.sparkContext.parallelize(ts)
+
+
+    val rows = tss
+      .groupBy(x => x.g)
+      .map(t => t._2)
+      .map(l => (l.map(t => t.v).sum, l))
+      .sortBy { case (l, _) => -l }
+      .map(t => t._2)
+      .zipWithIndex
+      .map(t => DataRow(
+        data = t._1.map(x => XYZ(t._2, x.x, x.v)).toList,
+        style = Style_BOXES))
+      .toLocalIterator
+    
+    val dia = Diagram[XYZ](
+      xLabel = Some("x"),
+      yLabel = Some("y"),
+      id = "sort_test_ungrouped",
+      title = "Sort Test ungrouped",
+
+      xyPlaneAt = Some(0),
+      dataRows = rows.toSeq,
     )
     val crea: VizCreator[XYZ] = VizCreators.gnuplot(clazz = classOf[XYZ])
     crea.createDiagram(dia)
